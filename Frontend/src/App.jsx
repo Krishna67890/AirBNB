@@ -15,7 +15,7 @@ import ListingDetails from './pages/ListingDetails';
 import MyListing from './pages/MyListing';
 import NetworkErrorHandler from './components/common/NetworkErrorHandler.jsx';
 import NotFound from './pages/NotFound';
-import OfflinePage from './pages/Offlinepage';
+import OfflinePage from './pages/offlinepage.jsx';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
