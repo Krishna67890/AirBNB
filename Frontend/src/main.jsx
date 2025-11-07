@@ -1,12 +1,11 @@
-// src/main.jsx
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App.jsx';
-import { AuthProvider } from './context/AuthContext';
-import { UIProvider } from './context/UIContext';
-import { ListingDataProvider } from './context/ListingContext'; 
-import { UserDataProvider } from './context/UserContext';
+import { AuthProvider } from './Context/AuthContext';
+import { UIProvider } from './Context/UIContext';
+import { ListingDataProvider } from './Context/Listingcontext.jsx';
+import UserProvider from './Context/UserContext.jsx'; // Use UserProvider
 import './index.css';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
@@ -14,10 +13,10 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <BrowserRouter>
       <AuthProvider>
         <UIProvider>
-          <ListingDataProvider> {/* ✅ Use correct provider name */}
-            <UserDataProvider>
+          <ListingDataProvider>
+            <UserProvider> {/* Use UserProvider */}
               <App />
-            </UserDataProvider>
+            </UserProvider>
           </ListingDataProvider>
         </UIProvider>
       </AuthProvider>

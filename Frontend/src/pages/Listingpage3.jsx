@@ -1,6 +1,6 @@
-import React, { useContext, useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ListingDataContext } from '../Context/Listingcontext.jsx';
+import { useListingData } from '../Context/Listingcontext.jsx';
 import {
   ArrowLeft,
   Edit3,
@@ -12,16 +12,12 @@ import {
   Home,
   FileText,
   Tag,
-  Clock,
   Shield,
   Sparkles,
   Upload,
   Eye,
   Zap,
-  Calendar,
-  Users,
-  Star,
-  Heart
+  ArrowRight
 } from 'lucide-react';
 
 function ListingPage3() {
@@ -35,10 +31,12 @@ function ListingPage3() {
         city,
         landmark,
         category,
-        handleAddListing,
+        listingType,
+        setListingType,
         resetForm,
-        createImageUrls
-    } = useContext(ListingDataContext);
+        addListing, // Make sure this function exists in your context
+        setListingData // Make sure this function exists in your context
+    } = useListingData();
 
     const navigate = useNavigate();
     const [loading, setLoading] = useState(false);
@@ -47,19 +45,68 @@ function ListingPage3() {
     const [showSuccessAnimation, setShowSuccessAnimation] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
 
+    // Debug logging to check what's in context
+    useEffect(() => {
+        console.log("🔍 ListingPage3 - Context Data:", {
+            title,
+            description,
+            rent,
+            city,
+            landmark,
+            category,
+            listingType,
+            hasImage1: !!frontEndImage1,
+            hasImage2: !!frontEndImage2,
+            hasImage3: !!frontEndImage3
+        });
+    }, [title, description, rent, city, landmark, category, listingType, frontEndImage1, frontEndImage2, frontEndImage3]);
+
     // Create image URLs for preview
-    const imageUrls = createImageUrls(frontEndImage1, frontEndImage2, frontEndImage3);
-    const images = [imageUrls.image1, imageUrls.image2, imageUrls.image3].filter(Boolean);
+    const getImageUrls = () => {
+        const urls = [];
+        
+        if (frontEndImage1) {
+            if (typeof frontEndImage1 === 'string') {
+                urls.push(frontEndImage1);
+            } else if (frontEndImage1 instanceof File) {
+                urls.push(URL.createObjectURL(frontEndImage1));
+            }
+        }
+        
+        if (frontEndImage2) {
+            if (typeof frontEndImage2 === 'string') {
+                urls.push(frontEndImage2);
+            } else if (frontEndImage2 instanceof File) {
+                urls.push(URL.createObjectURL(frontEndImage2));
+            }
+        }
+        
+        if (frontEndImage3) {
+            if (typeof frontEndImage3 === 'string') {
+                urls.push(frontEndImage3);
+            } else if (frontEndImage3 instanceof File) {
+                urls.push(URL.createObjectURL(frontEndImage3));
+            }
+        }
+        
+        return urls;
+    };
+
+    const images = getImageUrls();
 
     // Calculate listing quality score
     const listingScore = useMemo(() => {
         let score = 0;
-        if (title && title.length > 10) score += 25;
-        if (description && description.length > 50) score += 25;
-        if (images.length >= 1) score += 25;
-        if (rent && city && landmark && category) score += 25;
+        if (title && title.length > 5) score += 20;
+        if (description && description.length > 20) score += 20;
+        if (images.length >= 1) score += 20;
+        if (rent) score += 10;
+        if (city) score += 10;
+        if (landmark) score += 10;
+        if (category) score += 10;
+        if (listingType) score += 10;
         return score;
-    }, [title, description, images.length, rent, city, landmark, category]);
+    }, [title, description, images.length, rent, city, landmark, category, listingType]);
 
     // Simulate upload progress
     useEffect(() => {
@@ -79,28 +126,70 @@ function ListingPage3() {
         }
     }, [loading]);
 
+    // Clean up object URLs
+    useEffect(() => {
+        return () => {
+            images.forEach(url => {
+                if (url && url.startsWith('blob:')) {
+                    URL.revokeObjectURL(url);
+                }
+            });
+        };
+    }, [images]);
+
     const validateForm = () => {
-        const requiredFields = { title, description, rent, city, landmark, category };
-        const missingFields = Object.entries(requiredFields)
-            .filter(([_, value]) => !value)
-            .map(([key]) => key);
+        console.log("🔄 Validating form...");
+        console.log("📋 listingType value:", listingType);
+        
+        const newErrors = {};
 
-        if (missingFields.length > 0) {
-            setError(`Please complete these fields: ${missingFields.map(field => field.charAt(0).toUpperCase() + field.slice(1)).join(', ')}`);
+        // Check listingType first and separately
+        if (!listingType || listingType.trim() === '') {
+            newErrors.listingType = 'Please select whether this is for Rent or Purchase';
+            console.log("❌ listingType validation failed");
+        }
+
+        // Check other required fields
+        if (!title?.trim()) newErrors.title = 'Property title is required';
+        if (!description?.trim()) newErrors.description = 'Property description is required';
+        if (!rent || isNaN(Number(rent)) || Number(rent) <= 0) newErrors.rent = 'Please enter a valid rent amount';
+        if (!city?.trim()) newErrors.city = 'City is required';
+        if (!landmark?.trim()) newErrors.landmark = 'Landmark is required';
+        if (!category?.trim()) newErrors.category = 'Property category is required';
+        if (!frontEndImage1) newErrors.images = 'At least one property photo is required';
+
+        console.log("📊 Validation errors:", newErrors);
+
+        if (Object.keys(newErrors).length > 0) {
+            // Create user-friendly error message
+            const errorFields = Object.keys(newErrors);
+            let errorMessage = 'Please complete: ';
+            
+            const fieldNames = {
+                listingType: 'Rent or Purchase',
+                title: 'Property Title',
+                description: 'Description',
+                rent: 'Daily Rent',
+                city: 'City',
+                landmark: 'Landmark',
+                category: 'Property Category',
+                images: 'Property Photos'
+            };
+
+            errorMessage += errorFields.map(field => fieldNames[field] || field).join(', ');
+            setError(errorMessage);
             return false;
         }
 
-        if (!frontEndImage1) {
-            setError('At least one image is required for your listing');
-            return false;
-        }
-
+        console.log("✅ Form validation passed");
         return true;
     };
 
     const handleSubmit = async () => {
+        console.log("🚀 Starting submission process...");
+        
         if (!validateForm()) {
-            // Scroll to error
+            console.log("❌ Validation failed - stopping submission");
             setTimeout(() => {
                 const errorElement = document.getElementById('error-message');
                 errorElement?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -111,42 +200,142 @@ function ListingPage3() {
         setLoading(true);
         setError("");
         setSuccess("");
+        console.log("✅ Validation passed - proceeding with submission");
 
         try {
-            const newListingData = await handleAddListing();
-            
+            // Prepare listing data
+            const listingData = {
+                _id: Date.now().toString(),
+                title: title.trim(),
+                description: description.trim(),
+                rent: parseInt(rent),
+                city: city.trim(),
+                landmark: landmark.trim(),
+                category: category.trim(),
+                listingType: listingType.trim(),
+                // Handle image URLs properly
+                image1: frontEndImage1 instanceof File ? 
+                    URL.createObjectURL(frontEndImage1) : frontEndImage1,
+                image2: frontEndImage2 instanceof File ? 
+                    URL.createObjectURL(frontEndImage2) : frontEndImage2,
+                image3: frontEndImage3 instanceof File ? 
+                    URL.createObjectURL(frontEndImage3) : frontEndImage3,
+                createdAt: new Date().toISOString(),
+                status: 'active',
+                rating: 4.5, // Default rating
+                reviews: 0,
+                views: 0,
+                userId: 'current-user' // You might want to get this from user context
+            };
+
+            console.log("📦 Prepared listing data:", listingData);
+
+            // Save using context function (if available) or fallback to localStorage
+            if (addListing) {
+                addListing(listingData);
+            } else {
+                // Fallback: Save to localStorage directly
+                const existingListings = JSON.parse(localStorage.getItem('userListings') || '[]');
+                const updatedListings = [...existingListings, listingData];
+                localStorage.setItem('userListings', JSON.stringify(updatedListings));
+                
+                // Also update the context if possible
+                if (setListingData) {
+                    setListingData(updatedListings);
+                }
+            }
+
             // Complete progress bar
             setUploadProgress(100);
             
-            setSuccess("🎉 Amazing! Your listing is live!");
+            setSuccess(`🎉 Amazing! Your ${listingType} listing is now live!`);
             setShowSuccessAnimation(true);
+            console.log("✅ Submission successful");
             
-            // Navigate to home page with the new listing data
+            // Navigate to home page after success
             setTimeout(() => {
-                resetForm();
+                console.log("🏠 Navigating to home page...");
+                if (resetForm && typeof resetForm === 'function') {
+                    resetForm();
+                }
                 navigate("/", { 
                     state: { 
-                        newListing: newListingData,
-                        showSuccess: true 
+                        newListing: listingData,
+                        showSuccess: true,
+                        listingType: listingType
                     } 
                 });
-            }, 2500);
+            }, 2000);
+
         } catch (err) {
-            console.error("Submission error:", err);
-            setError(err.response?.data?.message || "We encountered an issue while creating your listing. Please try again in a moment.");
+            console.error("💥 Submission error:", err);
+            setError("We encountered an issue while creating your listing. Please try again.");
             setUploadProgress(0);
         } finally {
             setLoading(false);
         }
     };
 
+    // Fallback function to save to localStorage (keep as backup)
+    const saveToLocalStorage = async (listingData) => {
+        return new Promise((resolve, reject) => {
+            try {
+                setTimeout(() => {
+                    try {
+                        const newListing = {
+                            _id: Date.now().toString(),
+                            ...listingData,
+                            userId: 'current-user',
+                            // Handle images for localStorage
+                            image1: listingData.image1 instanceof File ? 
+                                URL.createObjectURL(listingData.image1) : listingData.image1,
+                            image2: listingData.image2 instanceof File ? 
+                                URL.createObjectURL(listingData.image2) : listingData.image2,
+                            image3: listingData.image3 instanceof File ? 
+                                URL.createObjectURL(listingData.image3) : listingData.image3
+                        };
+
+                        // Get existing listings from localStorage
+                        const existingListings = JSON.parse(localStorage.getItem('userListings') || '[]');
+                        
+                        // Add new listing
+                        const updatedListings = [...existingListings, newListing];
+                        
+                        // Save back to localStorage
+                        localStorage.setItem('userListings', JSON.stringify(updatedListings));
+                        
+                        console.log("💾 Saved to localStorage:", newListing);
+                        resolve(newListing);
+                    } catch (storageError) {
+                        console.error("💾 LocalStorage error:", storageError);
+                        reject(new Error("Failed to save listing"));
+                    }
+                }, 1000);
+            } catch (error) {
+                reject(error);
+            }
+        });
+    };
+
     const handleEditField = (section) => {
-        if (section === 'images') {
+        if (section === 'images' || section === 'details') {
             navigate("/listingpage1");
-        } else if (section === 'category') {
+        } else if (section === 'category' || section === 'listingType') {
             navigate("/listingpage2");
-        } else {
-            navigate("/listingpage1");
+        }
+    };
+
+    const handleFixListingType = () => {
+        console.log("🔧 Navigating to fix listing type...");
+        navigate("/listingpage2");
+    };
+
+    // Quick fix: Allow setting listingType directly on this page
+    const handleSetListingType = (type) => {
+        console.log("🎯 Setting listing type to:", type);
+        if (setListingType) {
+            setListingType(type);
+            setError(""); // Clear any previous errors
         }
     };
 
@@ -173,14 +362,14 @@ function ListingPage3() {
                             className="flex items-center gap-3 text-gray-600 hover:text-green-500 transition-colors group"
                         >
                             <ArrowLeft size={24} className="group-hover:-translate-x-1 transition-transform" />
-                            <span className="font-semibold text-lg">Back to Category</span>
+                            <span className="font-semibold text-lg">Back to Details</span>
                         </button>
                         
                         <div className="text-center">
                             <h1 className="text-3xl font-bold bg-gradient-to-r from-green-500 to-blue-600 bg-clip-text text-transparent">
-                                Review Your Listing
+                                Almost There! Review Your Listing
                             </h1>
-                            <p className="text-gray-600 mt-1">Step 3 of 3 - Final Preview</p>
+                            <p className="text-gray-600 mt-1">Final Step - Preview & Publish</p>
                         </div>
 
                         <div className="w-24"></div>
@@ -200,7 +389,7 @@ function ListingPage3() {
                                             <CheckCircle size={20} />
                                         </div>
                                         <span className="text-sm font-medium mt-2">
-                                            {index === 0 ? 'Details' : index === 1 ? 'Category' : 'Preview'}
+                                            {index === 0 ? 'Basic Info' : index === 1 ? 'Category & Type' : 'Review'}
                                         </span>
                                     </div>
                                     {index < 2 && (
@@ -220,8 +409,8 @@ function ListingPage3() {
                                 <div className="w-20 h-20 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
                                     <CheckCircle size={40} className="text-white" />
                                 </div>
-                                <h3 className="text-2xl font-bold text-gray-900 mb-2">Success!</h3>
-                                <p className="text-gray-600 mb-6">Your listing is now live and ready for bookings!</p>
+                                <h3 className="text-2xl font-bold text-gray-900 mb-2">Congratulations! 🎉</h3>
+                                <p className="text-gray-600 mb-6">Your {listingType} listing is now live!</p>
                                 <div className="w-8 h-8 border-4 border-green-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
                             </div>
                         </div>
@@ -231,14 +420,14 @@ function ListingPage3() {
                     <div className="bg-gradient-to-r from-green-500 to-blue-600 p-8 text-white">
                         <div className="flex items-center justify-between">
                             <div>
-                                <h1 className="text-3xl font-bold mb-2">Ready to Launch! 🚀</h1>
-                                <p className="text-green-100 text-lg">Review your listing before it goes live</p>
+                                <h1 className="text-3xl font-bold mb-2">Ready to Go Live! 🚀</h1>
+                                <p className="text-green-100 text-lg">Double-check everything looks perfect</p>
                             </div>
                             <div className="text-right">
-                                <div className={`text-2xl font-bold ${getScoreColor(listingScore)}`}>
+                                <div className={`text-2xl font-bold ${getScoreColor(listingScore)} bg-white/20 rounded-full w-16 h-16 flex items-center justify-center`}>
                                     {listingScore}%
                                 </div>
-                                <div className="text-green-100 text-sm">Listing Quality</div>
+                                <div className="text-green-100 text-sm mt-2">Listing Quality</div>
                             </div>
                         </div>
                     </div>
@@ -251,9 +440,31 @@ function ListingPage3() {
                         >
                             <div className="flex items-center gap-3">
                                 <AlertCircle size={24} className="text-red-500 flex-shrink-0" />
-                                <div>
-                                    <div className="font-semibold text-lg mb-1">Attention Needed</div>
-                                    <p>{error}</p>
+                                <div className="flex-1">
+                                    <div className="font-semibold text-lg mb-1">Almost There!</div>
+                                    <p className="mb-3">{error}</p>
+                                    {error.includes('Rent or Purchase') && (
+                                        <div className="flex gap-3">
+                                            <button
+                                                onClick={() => handleSetListingType('rent')}
+                                                className="px-6 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-semibold"
+                                            >
+                                                Set as Rent
+                                            </button>
+                                            <button
+                                                onClick={() => handleSetListingType('purchase')}
+                                                className="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-semibold"
+                                            >
+                                                Set as Purchase
+                                            </button>
+                                            <button
+                                                onClick={handleFixListingType}
+                                                className="px-6 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors font-semibold"
+                                            >
+                                                More Options
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -264,7 +475,7 @@ function ListingPage3() {
                             <div className="flex items-center gap-3">
                                 <CheckCircle size={24} className="text-green-500 flex-shrink-0" />
                                 <div>
-                                    <div className="font-semibold text-lg mb-1">Success!</div>
+                                    <div className="font-semibold text-lg mb-1">Perfect! 🎉</div>
                                     <p>{success}</p>
                                 </div>
                             </div>
@@ -275,7 +486,7 @@ function ListingPage3() {
                     {loading && (
                         <div className="mx-6 mt-6">
                             <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
-                                <span>Uploading your listing...</span>
+                                <span>Getting your listing ready...</span>
                                 <span>{uploadProgress}%</span>
                             </div>
                             <div className="w-full bg-gray-200 rounded-full h-3">
@@ -294,14 +505,14 @@ function ListingPage3() {
                             <div className="flex items-center justify-between">
                                 <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
                                     <ImageIcon size={24} className="text-blue-500" />
-                                    Property Gallery
+                                    Property Photos
                                 </h2>
                                 <button
                                     onClick={() => handleEditField('images')}
                                     className="flex items-center gap-2 text-blue-500 hover:text-blue-700 transition-colors font-semibold group"
                                 >
                                     <Edit3 size={16} className="group-hover:scale-110 transition-transform" />
-                                    Edit Photos
+                                    Change Photos
                                 </button>
                             </div>
 
@@ -315,28 +526,17 @@ function ListingPage3() {
                                                     alt={`Property view ${idx + 1}`}
                                                     className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                                                 />
-                                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-300" />
+                                                <div className="absolute top-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded-full">
+                                                    {idx === 0 ? 'Main Photo' : `Photo ${idx + 1}`}
+                                                </div>
                                             </>
                                         ) : (
                                             <div className="w-full h-full bg-gray-100 flex items-center justify-center text-gray-400">
                                                 <Upload size={32} />
                                             </div>
                                         )}
-                                        <div className="absolute top-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded-full">
-                                            {idx === 0 ? 'Main' : `Photo ${idx + 1}`}
-                                        </div>
                                     </div>
                                 ))}
-                            </div>
-
-                            {/* Image Tips */}
-                            <div className="bg-blue-50 rounded-2xl p-4">
-                                <div className="flex items-center gap-3 text-blue-700">
-                                    <Eye size={20} />
-                                    <div className="text-sm">
-                                        <strong>Pro Tip:</strong> High-quality photos can increase bookings by up to 40%
-                                    </div>
-                                </div>
                             </div>
                         </div>
 
@@ -357,126 +557,95 @@ function ListingPage3() {
                             </div>
 
                             <div className="space-y-4">
-                                {/* Title */}
+                                {/* Listing Type - Most Important Section */}
+                                <div className={`p-6 rounded-2xl border-2 transition-all duration-300 ${
+                                    !listingType ? 'bg-yellow-50 border-yellow-300' : 'bg-gradient-to-r from-gray-50 to-white border-gray-200'
+                                }`}>
+                                    <div className="flex items-center gap-3 mb-3">
+                                        <Tag size={20} className={!listingType ? "text-yellow-600" : "text-purple-600"} />
+                                        <h3 className="font-semibold text-gray-800">Listing Type</h3>
+                                        {!listingType && (
+                                            <span className="bg-yellow-500 text-white text-xs px-2 py-1 rounded-full ml-2">
+                                                Required
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        {listingType ? (
+                                            <span className={`px-4 py-2 rounded-full font-semibold ${
+                                                listingType === 'rent' 
+                                                    ? 'bg-green-100 text-green-800 border border-green-300' 
+                                                    : 'bg-blue-100 text-blue-800 border border-blue-300'
+                                            }`}>
+                                                {listingType.charAt(0).toUpperCase() + listingType.slice(1)}
+                                            </span>
+                                        ) : (
+                                            <div className="space-y-3">
+                                                <p className="text-yellow-700 font-medium">Is this property for Rent or Purchase?</p>
+                                                <div className="flex gap-3">
+                                                    <button
+                                                        onClick={() => handleSetListingType('rent')}
+                                                        className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-semibold"
+                                                    >
+                                                        For Rent
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleSetListingType('purchase')}
+                                                        className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-semibold"
+                                                    >
+                                                        For Purchase
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Other details remain the same */}
                                 <div className="bg-gradient-to-r from-gray-50 to-white p-6 rounded-2xl border border-gray-200">
                                     <div className="flex items-center gap-3 mb-3">
                                         <Home size={20} className="text-gray-600" />
                                         <h3 className="font-semibold text-gray-800">Property Title</h3>
                                     </div>
-                                    <p className="text-gray-900 text-lg font-medium">{title}</p>
-                                    {title && title.length > 10 && (
-                                        <div className="flex items-center gap-1 mt-2 text-green-500 text-sm">
-                                            <CheckCircle size={14} />
-                                            Great title length
-                                        </div>
-                                    )}
+                                    <p className="text-gray-900 text-lg font-medium">{title || "No title provided"}</p>
                                 </div>
 
-                                {/* Description */}
                                 <div className="bg-gradient-to-r from-gray-50 to-white p-6 rounded-2xl border border-gray-200">
                                     <div className="flex items-center gap-3 mb-3">
                                         <FileText size={20} className="text-gray-600" />
                                         <h3 className="font-semibold text-gray-800">Description</h3>
                                     </div>
-                                    <p className="text-gray-700 leading-relaxed whitespace-pre-line">{description}</p>
-                                    {description && description.length > 50 && (
-                                        <div className="flex items-center gap-1 mt-2 text-green-500 text-sm">
-                                            <CheckCircle size={14} />
-                                            Detailed description
-                                        </div>
-                                    )}
+                                    <p className="text-gray-700 leading-relaxed whitespace-pre-line">{description || "No description provided"}</p>
                                 </div>
 
-                                {/* Category & Price */}
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div className="bg-gradient-to-r from-gray-50 to-white p-6 rounded-2xl border border-gray-200">
                                         <div className="flex items-center gap-3 mb-3">
                                             <Tag size={20} className="text-purple-600" />
                                             <h3 className="font-semibold text-gray-800">Category</h3>
                                         </div>
-                                        <p className="text-gray-900 font-medium">{category}</p>
-                                        <button
-                                            onClick={() => handleEditField('category')}
-                                            className="text-purple-500 hover:text-purple-700 text-sm mt-2 transition-colors"
-                                        >
-                                            Change category
-                                        </button>
+                                        <p className="text-gray-900 font-medium">{category || "No category selected"}</p>
                                     </div>
 
                                     <div className="bg-gradient-to-r from-gray-50 to-white p-6 rounded-2xl border border-gray-200">
                                         <div className="flex items-center gap-3 mb-3">
                                             <DollarSign size={20} className="text-yellow-600" />
-                                            <h3 className="font-semibold text-gray-800">Daily Rate</h3>
+                                            <h3 className="font-semibold text-gray-800">
+                                                {listingType === 'rent' ? 'Daily Rate' : 'Price'}
+                                            </h3>
                                         </div>
-                                        <p className="text-2xl font-bold text-gray-900">₹{rent}</p>
-                                        <p className="text-gray-600 text-sm">per night</p>
+                                        <p className="text-2xl font-bold text-gray-900">₹{rent || "0"}</p>
                                     </div>
                                 </div>
 
-                                {/* Location */}
                                 <div className="bg-gradient-to-r from-gray-50 to-white p-6 rounded-2xl border border-gray-200">
                                     <div className="flex items-center gap-3 mb-3">
                                         <MapPin size={20} className="text-red-500" />
                                         <h3 className="font-semibold text-gray-800">Location</h3>
                                     </div>
-                                    <p className="text-gray-900 font-medium">{landmark}, {city}</p>
-                                    <div className="flex items-center gap-1 mt-2 text-blue-500 text-sm">
-                                        <MapPin size={14} />
-                                        Perfect for location-based searches
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Quality Score & Tips */}
-                    <div className="px-8 pb-8">
-                        <div className="bg-gradient-to-r from-yellow-50 to-orange-50 rounded-2xl p-6 border border-yellow-200">
-                            <div className="flex items-center gap-3 mb-4">
-                                <Sparkles size={24} className="text-yellow-500" />
-                                <h3 className="text-xl font-bold text-gray-900">Listing Quality Score</h3>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div>
-                                    <div className="flex items-center gap-4 mb-4">
-                                        <div className={`text-4xl font-bold ${getScoreColor(listingScore)}`}>
-                                            {listingScore}%
-                                        </div>
-                                        <div>
-                                            <div className="font-semibold text-gray-800">{getScoreMessage(listingScore)}</div>
-                                            <div className="text-sm text-gray-600">Based on completeness and quality</div>
-                                        </div>
-                                    </div>
-                                    <div className="space-y-2 text-sm">
-                                        <div className="flex items-center gap-2">
-                                            <CheckCircle size={16} className={title && title.length > 10 ? "text-green-500" : "text-gray-300"} />
-                                            <span>Compelling title (10+ chars)</span>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <CheckCircle size={16} className={description && description.length > 50 ? "text-green-500" : "text-gray-300"} />
-                                            <span>Detailed description (50+ chars)</span>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <CheckCircle size={16} className={images.length >= 1 ? "text-green-500" : "text-gray-300"} />
-                                            <span>High-quality photos ({images.length}/3)</span>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <CheckCircle size={16} className={rent && city && landmark && category ? "text-green-500" : "text-gray-300"} />
-                                            <span>Complete location & pricing</span>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="space-y-3">
-                                    <h4 className="font-semibold text-gray-800 flex items-center gap-2">
-                                        <Zap size={16} className="text-yellow-500" />
-                                        Quick Tips to Improve
-                                    </h4>
-                                    <div className="space-y-2 text-sm text-gray-600">
-                                        <p>• Add more high-quality photos from different angles</p>
-                                        <p>• Include unique amenities and special features</p>
-                                        <p>• Set competitive pricing based on local market</p>
-                                        <p>• Consider adding house rules and check-in instructions</p>
-                                    </div>
+                                    <p className="text-gray-900 font-medium">
+                                        {landmark && city ? `${landmark}, ${city}` : "No location provided"}
+                                    </p>
                                 </div>
                             </div>
                         </div>
@@ -487,7 +656,7 @@ function ListingPage3() {
                         <div className="flex flex-col lg:flex-row gap-4 justify-between items-center">
                             <div className="flex items-center gap-3 text-gray-600">
                                 <Shield size={20} />
-                                <span className="text-sm">Your listing is protected by our quality standards</span>
+                                <span className="text-sm">Your listing is secure and protected</span>
                             </div>
                             
                             <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto">
@@ -513,7 +682,7 @@ function ListingPage3() {
                                     ) : (
                                         <>
                                             <Zap size={20} className="group-hover:scale-110 transition-transform" />
-                                            Publish Listing
+                                            {listingType ? `Publish ${listingType.charAt(0).toUpperCase() + listingType.slice(1)} Listing` : 'Publish Listing'}
                                         </>
                                     )}
                                 </button>

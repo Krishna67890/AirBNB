@@ -1,6 +1,7 @@
-import React, { useContext, useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ListingDataContext } from '../Context/Listingcontext.jsx';
+import { useListingData } from '../Context/Listingcontext.jsx';
+
 import {
   ArrowLeft,
   Home,
@@ -19,15 +20,31 @@ import {
   CheckCircle,
   Search,
   X,
-  Info
+  Info,
+  DollarSign,
+  Calendar,
+  Tag
 } from 'lucide-react';
 
 function ListingPage2() {
   const navigate = useNavigate();
-  const { category, setCategory, title, description } = useContext(ListingDataContext);
+  const { 
+    category, 
+    setCategory, 
+    title, 
+    description, 
+    listingType, 
+    setListingType,
+    frontEndImage1,
+    rent,
+    city,
+    landmark
+  } = useListingData();
+  
   const [validationError, setValidationError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState(category);
+  const [selectedListingType, setSelectedListingType] = useState(listingType);
 
   // Enhanced property types with better icons and descriptions
   const propertyTypes = useMemo(() => [
@@ -123,6 +140,24 @@ function ListingPage2() {
     }
   ], []);
 
+  // Listing types
+  const listingTypes = useMemo(() => [
+    {
+      type: "rent",
+      title: "For Rent",
+      description: "Short-term or long-term rental",
+      icon: <Calendar size={24} />,
+      color: "green"
+    },
+    {
+      type: "purchase", 
+      title: "For Sale",
+      description: "Permanent property sale",
+      icon: <DollarSign size={24} />,
+      color: "blue"
+    }
+  ], []);
+
   // Filter categories based on search
   const filteredCategories = useMemo(() => {
     if (!searchQuery) return propertyTypes;
@@ -145,11 +180,33 @@ function ListingPage2() {
     setValidationError('');
   };
 
+  const handleListingTypeSelect = (type) => {
+    setSelectedListingType(type);
+    setListingType(type);
+    setValidationError('');
+  };
+
+  // Calculate completion score
+  const calculateCompletion = () => {
+    const fields = [
+      title?.trim().length > 5,
+      description?.trim().length > 20,
+      !!frontEndImage1,
+      !!selectedListingType,
+      !!rent && !isNaN(Number(rent)) && Number(rent) > 0,
+      !!city?.trim(),
+      !!landmark?.trim(),
+      !!selectedCategory
+    ];
+    const completed = fields.filter(Boolean).length;
+    return Math.round((completed / fields.length) * 100);
+  };
+
+  const completionScore = calculateCompletion();
+
   const handleNext = () => {
     if (!selectedCategory) {
       setValidationError('Please select a property type to continue');
-      
-      // Add shake animation to error
       const errorElement = document.getElementById('validation-error');
       if (errorElement) {
         errorElement.classList.add('animate-shake');
@@ -157,6 +214,17 @@ function ListingPage2() {
       }
       return;
     }
+
+    if (!selectedListingType) {
+      setValidationError('Please select whether this is for Rent or Sale');
+      const errorElement = document.getElementById('validation-error');
+      if (errorElement) {
+        errorElement.classList.add('animate-shake');
+        setTimeout(() => errorElement.classList.remove('animate-shake'), 500);
+      }
+      return;
+    }
+
     navigate("/listingpage3");
   };
 
@@ -175,21 +243,21 @@ function ListingPage2() {
         <div className="bg-white rounded-3xl shadow-2xl mb-6 p-6">
           <div className="flex items-center justify-between">
             <button
-              onClick={() => navigate("/")}
+              onClick={() => navigate("/listingpage1")}
               className="flex items-center gap-3 text-gray-600 hover:text-rose-500 transition-colors group"
             >
               <ArrowLeft size={24} className="group-hover:-translate-x-1 transition-transform" />
-              <span className="font-semibold text-lg">Back to Home</span>
+              <span className="font-semibold text-lg">Back to Details</span>
             </button>
             
             <div className="text-center">
               <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent">
                 Choose Property Type
               </h1>
-              <p className="text-gray-600 mt-1">Step 2 of 3 - Category Selection</p>
+              <p className="text-gray-600 mt-1">Step 2 of 3 - Category & Listing Type</p>
             </div>
 
-            <div className="w-24"></div> {/* Spacer for balance */}
+            <div className="w-24"></div>
           </div>
 
           {/* Enhanced Stepper */}
@@ -226,6 +294,44 @@ function ListingPage2() {
               ))}
             </div>
           </div>
+
+          {/* Progress Indicator */}
+          <div className="mt-6 bg-gray-50 rounded-2xl p-4">
+            <div className="flex items-center justify-between text-sm mb-2">
+              <span className="text-gray-600">Overall Progress</span>
+              <span className={`font-semibold ${
+                completionScore === 100 ? 'text-green-500' : 'text-blue-500'
+              }`}>
+                {completionScore}% Complete
+              </span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div 
+                className={`h-2 rounded-full transition-all duration-500 ${
+                  completionScore === 100 ? 'bg-green-500' : 'bg-blue-500'
+                }`}
+                style={{ width: `${completionScore}%` }}
+              />
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3 text-xs">
+              <div className={`flex items-center gap-1 ${title?.trim().length > 5 ? 'text-green-500' : 'text-gray-400'}`}>
+                <CheckCircle size={12} />
+                <span>Clear title</span>
+              </div>
+              <div className={`flex items-center gap-1 ${description?.trim().length > 20 ? 'text-green-500' : 'text-gray-400'}`}>
+                <CheckCircle size={12} />
+                <span>Detailed description</span>
+              </div>
+              <div className={`flex items-center gap-1 ${frontEndImage1 ? 'text-green-500' : 'text-gray-400'}`}>
+                <CheckCircle size={12} />
+                <span>Property photos</span>
+              </div>
+              <div className={`flex items-center gap-1 ${selectedListingType ? 'text-green-500' : 'text-gray-400'}`}>
+                <CheckCircle size={12} />
+                <span>Rent or Sale</span>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div className="bg-white rounded-3xl shadow-2xl p-8 lg:p-12">
@@ -247,6 +353,55 @@ function ListingPage2() {
               </div>
             </div>
           )}
+
+          {/* Listing Type Selection - NEW SECTION */}
+          <div className="mb-8">
+            <h3 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
+              <Tag size={24} className="text-purple-500" />
+              How do you want to list this property?
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {listingTypes.map((item) => (
+                <button
+                  key={item.type}
+                  onClick={() => handleListingTypeSelect(item.type)}
+                  className={`p-6 rounded-2xl border-2 transition-all duration-300 transform hover:scale-105 ${
+                    selectedListingType === item.type
+                      ? `border-${item.color}-500 bg-${item.color}-50 shadow-lg scale-105 ring-2 ring-${item.color}-500/20`
+                      : 'border-gray-200 hover:border-gray-300 hover:shadow-md'
+                  }`}
+                >
+                  <div className={`p-3 rounded-xl mb-3 transition-colors ${
+                    selectedListingType === item.type 
+                      ? `bg-${item.color}-500 text-white` 
+                      : 'bg-gray-100 text-gray-600'
+                  }`}>
+                    {item.icon}
+                  </div>
+                  <div className="text-left">
+                    <div className={`font-semibold text-lg transition-colors ${
+                      selectedListingType === item.type 
+                        ? `text-${item.color}-700` 
+                        : 'text-gray-800'
+                    }`}>
+                      {item.title}
+                    </div>
+                    <div className="text-sm text-gray-500 mt-1">
+                      {item.description}
+                    </div>
+                  </div>
+                  
+                  {selectedListingType === item.type && (
+                    <div className="absolute top-4 right-4">
+                      <div className={`w-6 h-6 bg-${item.color}-500 rounded-full flex items-center justify-center`}>
+                        <CheckCircle size={14} className="text-white" />
+                      </div>
+                    </div>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
 
           {/* Search Bar */}
           <div className="mb-8">
@@ -345,7 +500,7 @@ function ListingPage2() {
                   <button
                     key={type.name}
                     onClick={() => handleCategorySelect(type.name)}
-                    className={`group p-4 rounded-2xl border-2 transition-all duration-300 transform hover:scale-105 ${
+                    className={`group p-4 rounded-2xl border-2 transition-all duration-300 transform hover:scale-105 relative ${
                       selectedCategory === type.name
                         ? 'border-blue-500 bg-blue-50 shadow-lg scale-105 ring-2 ring-blue-500/20'
                         : 'border-gray-200 hover:border-blue-300 hover:shadow-md'
@@ -397,18 +552,33 @@ function ListingPage2() {
             )}
           </div>
 
-          {/* Selected Category Preview */}
-          {selectedCategory && (
+          {/* Selected Options Preview */}
+          {(selectedCategory || selectedListingType) && (
             <div className="mt-8 p-6 bg-gradient-to-r from-green-50 to-emerald-50 rounded-2xl border border-green-200">
               <div className="flex items-center justify-between">
                 <div>
-                  <h4 className="text-lg font-semibold text-gray-800 mb-1 flex items-center gap-2">
+                  <h4 className="text-lg font-semibold text-gray-800 mb-2 flex items-center gap-2">
                     <CheckCircle size={20} className="text-green-500" />
-                    Selected Property Type
+                    Selected Options
                   </h4>
-                  <p className="text-gray-600">
-                    You've selected <strong className="text-green-600">{selectedCategory}</strong>
-                  </p>
+                  <div className="flex flex-wrap gap-4 text-sm text-gray-600">
+                    {selectedListingType && (
+                      <div>
+                        <strong className="text-gray-800">Listing Type:</strong>{' '}
+                        <span className="text-green-600 font-medium capitalize">
+                          {selectedListingType}
+                        </span>
+                      </div>
+                    )}
+                    {selectedCategory && (
+                      <div>
+                        <strong className="text-gray-800">Property Type:</strong>{' '}
+                        <span className="text-green-600 font-medium">
+                          {selectedCategory}
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div className="text-right">
                   <div className="text-2xl font-bold text-green-600">✓</div>
@@ -429,9 +599,9 @@ function ListingPage2() {
             </button>
             <button
               onClick={handleNext}
-              disabled={!selectedCategory}
+              disabled={!selectedCategory || !selectedListingType}
               className={`flex-1 py-4 px-6 rounded-2xl transition-all duration-200 font-semibold text-lg flex items-center justify-center gap-3 ${
-                selectedCategory
+                selectedCategory && selectedListingType
                   ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white hover:shadow-xl hover:scale-105'
                   : 'bg-gray-300 text-gray-500 cursor-not-allowed'
               }`}
@@ -445,7 +615,7 @@ function ListingPage2() {
           <div className="mt-6 text-center">
             <p className="text-sm text-gray-500 flex items-center justify-center gap-2">
               <Info size={16} />
-              Choosing the right category helps guests find your property more easily
+              Choosing the right category and listing type helps {selectedListingType === 'rent' ? 'guests' : 'buyers'} find your property more easily
             </p>
           </div>
         </div>

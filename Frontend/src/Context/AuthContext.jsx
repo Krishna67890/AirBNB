@@ -1,21 +1,22 @@
-// src/context/AuthContext.jsx
-import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
+// src/Context/AuthContext.jsx
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
-// Create the context
-const AuthContext = createContext();
+export const AuthContext = createContext();
 
-// Auth Provider Component
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [token, setToken] = useState(localStorage.getItem('token'));
+  const [loading, setLoading] = useState(true);
+  const [token, setToken] = useState(localStorage.getItem('authToken'));
+  
+  // Use Vite environment variable (not process.env)
+  const serverUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
   // Initialize auth state from localStorage
   useEffect(() => {
-    const initializeAuth = async () => {
-      const storedToken = localStorage.getItem('token');
-      const storedUser = localStorage.getItem('user');
+    const initializeAuth = () => {
+      const storedToken = localStorage.getItem('authToken');
+      const storedUser = localStorage.getItem('userData');
 
       if (storedToken && storedUser) {
         try {
@@ -27,44 +28,58 @@ export const AuthProvider = ({ children }) => {
           logout();
         }
       }
-      setIsLoading(false);
+      setLoading(false);
     };
 
     initializeAuth();
   }, []);
 
   // Login function
-  const login = useCallback(async (userData, authToken) => {
+  const login = useCallback(async (email, password) => {
     try {
-      setUser(userData);
-      setToken(authToken);
-      setIsAuthenticated(true);
-      
-      localStorage.setItem('token', authToken);
-      localStorage.setItem('user', JSON.stringify(userData));
-      
-      return { success: true };
+      const response = await fetch(`${serverUrl}/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        
+        setUser(data.user);
+        setToken(data.token);
+        setIsAuthenticated(true);
+        
+        localStorage.setItem('authToken', data.token);
+        localStorage.setItem('userData', JSON.stringify(data.user));
+        
+        return { success: true };
+      } else {
+        const errorData = await response.json();
+        return { success: false, error: errorData.message || 'Login failed' };
+      }
     } catch (error) {
-      console.error('Login error:', error);
       return { success: false, error: error.message };
     }
-  }, []);
+  }, [serverUrl]);
 
   // Logout function
   const logout = useCallback(() => {
     setUser(null);
     setToken(null);
     setIsAuthenticated(false);
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('userData');
   }, []);
 
   // Update user data
-  const updateUser = useCallback(async (updatedData) => {
+  const updateUser = useCallback((updatedData) => {
     try {
       const newUserData = { ...user, ...updatedData };
       setUser(newUserData);
-      localStorage.setItem('user', JSON.stringify(newUserData));
+      localStorage.setItem('userData', JSON.stringify(newUserData));
       return { success: true };
     } catch (error) {
       console.error('Update user error:', error);
@@ -72,49 +87,19 @@ export const AuthProvider = ({ children }) => {
     }
   }, [user]);
 
-  // Check if user has specific role
-  const hasRole = useCallback((role) => {
-    return user?.roles?.includes(role) || user?.role === role;
-  }, [user]);
+  // Set auth token
+  const setAuthToken = useCallback((newToken) => {
+    setToken(newToken);
+    localStorage.setItem('authToken', newToken);
+  }, []);
 
-  // Check if user has specific permission
-  const hasPermission = useCallback((permission) => {
-    return user?.permissions?.includes(permission);
-  }, [user]);
-
-  // Refresh token
-  const refreshToken = useCallback(async () => {
-    try {
-      const response = await fetch('/api/auth/refresh', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setToken(data.token);
-        localStorage.setItem('token', data.token);
-        return { success: true, token: data.token };
-      } else {
-        logout();
-        return { success: false, error: 'Token refresh failed' };
-      }
-    } catch (error) {
-      console.error('Token refresh error:', error);
-      logout();
-      return { success: false, error: error.message };
-    }
-  }, [token, logout]);
-
-  // Utility functions that don't depend on the hook
-  const getDisplayName = () => {
+  // Utility functions
+  const getDisplayName = useCallback(() => {
     if (!user) return 'Guest';
     return user.fullName || user.name || user.username || user.email?.split('@')[0] || 'User';
-  };
+  }, [user]);
 
-  const getUserInitials = () => {
+  const getUserInitials = useCallback(() => {
     if (!user) return 'G';
     if (user.fullName) {
       return user.fullName
@@ -125,40 +110,37 @@ export const AuthProvider = ({ children }) => {
         .slice(0, 2);
     }
     return getDisplayName().charAt(0).toUpperCase();
-  };
+  }, [user, getDisplayName]);
 
-  const can = (action, resource) => {
+  const can = useCallback((action, resource) => {
     if (!isAuthenticated) return false;
-    return hasPermission(`${resource}:${action}`) || hasRole('admin');
-  };
+    return user?.role === 'admin' || user?.permissions?.includes(`${resource}:${action}`);
+  }, [isAuthenticated, user]);
 
-  const isOwner = (resourceUserId) => {
+  const isOwner = useCallback((resourceUserId) => {
     return user?._id === resourceUserId || user?.id === resourceUserId;
-  };
+  }, [user]);
 
-  const getJoinDate = () => {
-    if (!user?.createdAt) return null;
-    return new Date(user.createdAt).toLocaleDateString();
-  };
-
-  // Value to be provided by context
+  // Context value
   const value = {
+    // Core auth state
     user,
     isAuthenticated,
-    isLoading,
+    loading,
     token,
+    serverUrl,
+    
+    // Auth actions
     login,
     logout,
     updateUser,
-    hasRole,
-    hasPermission,
-    refreshToken,
-    // Include utility functions in context
+    setAuthToken,
+    
+    // Utility functions
     displayName: getDisplayName(),
     initials: getUserInitials(),
-    joinDate: getJoinDate(),
     can,
-    isOwner
+    isOwner,
   };
 
   return (
@@ -168,19 +150,10 @@ export const AuthProvider = ({ children }) => {
   );
 };
 
-// Custom hook to use auth context
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  
   if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
-  
   return context;
 };
-
-// Export the context itself
-export { AuthContext };
-
-// Export as default
-export default AuthContext;

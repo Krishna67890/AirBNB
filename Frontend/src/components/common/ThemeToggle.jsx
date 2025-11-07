@@ -1,7 +1,6 @@
 // src/components/common/Theme/ThemeToggle.jsx
 import React, { useContext, useState, useEffect, useCallback } from 'react';
 import { UIContext } from "../../Context/UIContext.jsx";
-import { AuthContext } from "../../Context/AuthContext.jsx";
 import './ThemeToggle.css';
 
 const ThemeToggle = ({ 
@@ -12,7 +11,6 @@ const ThemeToggle = ({
   persistPreference = true 
 }) => {
   const { theme, toggleTheme, setTheme } = useContext(UIContext);
-  const { user, updateUser } = useContext(AuthContext);
   const [isLoading, setIsLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
@@ -23,24 +21,25 @@ const ThemeToggle = ({
     setMounted(true);
   }, []);
 
-  // Load user's theme preference on mount
+  // Load theme preference on mount
   useEffect(() => {
-    const loadUserTheme = async () => {
-      if (user?.id && persistPreference) {
+    const loadTheme = async () => {
+      if (persistPreference) {
         try {
-          // In a real app, you'd fetch from your API
-          const savedTheme = localStorage.getItem(`user_${user.id}_theme`);
+          // Try to load from localStorage
+          const savedTheme = localStorage.getItem('theme');
           if (savedTheme && (savedTheme === 'light' || savedTheme === 'dark')) {
             setTheme(savedTheme);
+            document.documentElement.classList.toggle('dark', savedTheme === 'dark');
           }
         } catch (error) {
-          console.warn('Failed to load user theme preference:', error);
+          console.warn('Failed to load theme preference:', error);
         }
       }
     };
 
-    loadUserTheme();
-  }, [user?.id, persistPreference, setTheme]);
+    loadTheme();
+  }, [persistPreference, setTheme]);
 
   // Enhanced theme toggle with animations and persistence
   const handleThemeToggle = useCallback(async () => {
@@ -61,14 +60,6 @@ const ThemeToggle = ({
       // Persist to localStorage
       if (persistPreference) {
         localStorage.setItem('theme', newTheme);
-        
-        // Save to user profile if authenticated
-        if (user?.id) {
-          localStorage.setItem(`user_${user.id}_theme`, newTheme);
-          
-          // In a real app, you'd make an API call here
-          // await updateUser({ themePreference: newTheme });
-        }
       }
 
       // Update document class for Tailwind dark mode
@@ -83,8 +74,7 @@ const ThemeToggle = ({
       if (window.gtag) {
         window.gtag('event', 'theme_toggle', {
           event_category: 'ui_interaction',
-          event_label: newTheme,
-          user_id: user?.id
+          event_label: newTheme
         });
       }
 
@@ -94,7 +84,7 @@ const ThemeToggle = ({
       setIsLoading(false);
       setTimeout(() => setIsPressed(false), 200);
     }
-  }, [theme, toggleTheme, user, persistPreference, isLoading]);
+  }, [theme, toggleTheme, persistPreference, isLoading]);
 
   // Keyboard accessibility
   const handleKeyDown = useCallback((e) => {
@@ -122,7 +112,8 @@ const ThemeToggle = ({
     filled: `bg-gradient-to-r from-rose-500 to-orange-400 text-white 
              shadow-lg hover:shadow-xl`,
     outline: `bg-transparent border-2 border-rose-500 text-rose-500 
-              hover:bg-rose-50 dark:hover:bg-rose-900/20`
+              hover:bg-rose-50 dark:hover:bg-rose-900/20`,
+    advanced: `bg-transparent` // Added for the advanced variant
   };
 
   // Animation classes
@@ -181,7 +172,37 @@ const ThemeToggle = ({
     );
   }
 
-  // Advanced toggle with multiple variants
+  // Advanced toggle with slider (alternative design)
+  if (variant === 'advanced') {
+    return (
+      <div className="flex items-center gap-3">
+        <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
+          ☀️
+        </span>
+        <div 
+          onClick={handleThemeToggle}
+          onKeyDown={handleKeyDown}
+          role="button"
+          tabIndex={0}
+          className={`w-14 h-7 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-300 ${
+            theme === 'light' ? 'bg-gray-300' : 'bg-rose-500'
+          } ${animationClasses}`}
+          aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
+        >
+          <div className={`
+            bg-white rounded-full shadow-lg transform transition-transform duration-300
+            ${theme === 'light' ? 'translate-x-0' : 'translate-x-7'}
+            ${sizeClasses.small}
+          `} />
+        </div>
+        <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
+          🌙
+        </span>
+      </div>
+    );
+  }
+
+  // Default toggle with multiple variants
   return (
     <div className="relative inline-block">
       <button
@@ -269,30 +290,6 @@ const ThemeToggle = ({
         `}>
           {theme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
           <div className="absolute -top-1 left-1/2 transform -translate-x-1/2 w-2 h-2 bg-gray-900 dark:bg-gray-700 rotate-45" />
-        </div>
-      )}
-
-      {/* Advanced toggle with slider (alternative design) */}
-      {variant === 'advanced' && (
-        <div className="flex items-center gap-3">
-          <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
-            ☀️
-          </span>
-          <div 
-            onClick={handleThemeToggle}
-            className={`w-14 h-7 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-300 ${
-              theme === 'light' ? 'bg-gray-300' : 'bg-rose-500'
-            }`}
-          >
-            <div className={`
-              bg-white rounded-full shadow-lg transform transition-transform duration-300
-              ${theme === 'light' ? 'translate-x-0' : 'translate-x-7'}
-              ${sizeClasses.small}
-            `} />
-          </div>
-          <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
-            🌙
-          </span>
         </div>
       )}
     </div>

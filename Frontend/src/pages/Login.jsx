@@ -1,7 +1,7 @@
 import React, { useState, useContext, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../Context/AuthContext.jsx';
-import { UserDataContext } from '../Context/Usercontext.jsx';
+import { useUser } from '../Context/UserContext.jsx'; // Use the custom hook
 import {
   Eye,
   EyeOff,
@@ -12,7 +12,6 @@ import {
   UserPlus,
   AlertCircle,
   CheckCircle,
-  Sparkles,
   Shield,
   Zap,
   Smartphone,
@@ -32,12 +31,19 @@ function Login() {
     const [showSuccessAnimation, setShowSuccessAnimation] = useState(false);
     
     const { serverUrl } = useContext(AuthContext);
-    const [userData, setUserData] = useContext(UserDataContext);
+    const { setUserData } = useUser(); // Use the custom hook instead of useContext directly
     const navigate = useNavigate();
     const location = useLocation();
     
     const emailRef = useRef(null);
     const passwordRef = useRef(null);
+
+    // Demo user credentials
+    const demoUsers = [
+        { email: 'demo@airbnb.com', password: 'demo123', role: 'user' },
+        { email: 'host@airbnb.com', password: 'host123', role: 'host' },
+        { email: 'admin@airbnb.com', password: 'admin123', role: 'admin' }
+    ];
 
     // Check for success message from signup
     useEffect(() => {
@@ -72,35 +78,52 @@ function Login() {
         }
 
         try {
-            const result = await axios.post(`${serverUrl}/api/auth/login`, {
-                email: email.trim(),
-                password
-            }, { 
-                withCredentials: true,
-                timeout: 10000 // 10 second timeout
-            });
-
-            // Save to localStorage if remember me is checked
-            if (rememberMe) {
-                localStorage.setItem('rememberedEmail', email);
-            } else {
-                localStorage.removeItem('rememberedEmail');
-            }
-
-            setUserData(result.data);
-            setShowSuccessAnimation(true);
+            // For demo purposes - simulate successful login without backend
+            const demoUser = demoUsers.find(user => user.email === email && user.password === password);
             
-            // Show success and navigate
-            setTimeout(() => {
-                const returnUrl = location.state?.returnUrl || '/';
-                navigate(returnUrl, { 
-                    replace: true,
-                    state: { 
-                        showWelcome: true,
-                        userName: result.data.user?.name || 'there'
-                    }
-                });
-            }, 1500);
+            if (demoUser) {
+                // Simulate API response
+                const userData = {
+                    user: {
+                        _id: 'demo-user-id',
+                        name: email.split('@')[0].charAt(0).toUpperCase() + email.split('@')[0].slice(1),
+                        email: email,
+                        role: demoUser.role,
+                        isVerified: true,
+                        profilePicture: null
+                    },
+                    token: 'demo-jwt-token'
+                };
+
+                // Save to localStorage if remember me is checked
+                if (rememberMe) {
+                    localStorage.setItem('rememberedEmail', email);
+                } else {
+                    localStorage.removeItem('rememberedEmail');
+                }
+
+                setUserData(userData);
+                setShowSuccessAnimation(true);
+                
+                // Show success and navigate
+                setTimeout(() => {
+                    const returnUrl = location.state?.returnUrl || '/';
+                    navigate(returnUrl, { 
+                        replace: true,
+                        state: { 
+                            showWelcome: true,
+                            userName: userData.user.name
+                        }
+                    });
+                }, 1500);
+            } else {
+                setError("Invalid email or password. Try demo@airbnb.com / demo123");
+                
+                // Shake animation for error
+                const form = e.target;
+                form.classList.add('animate-shake');
+                setTimeout(() => form.classList.remove('animate-shake'), 500);
+            }
 
         } catch (error) {
             console.error('Login error:', error);
@@ -136,12 +159,16 @@ function Login() {
     }, []);
 
     // Demo login for testing
-    const handleDemoLogin = () => {
-        setEmail('demo@airbnb.com');
-        setPassword('demo123');
+    const handleDemoLogin = (userType = 'user') => {
+        const demoUser = demoUsers.find(user => user.role === userType) || demoUsers[0];
+        setEmail(demoUser.email);
+        setPassword(demoUser.password);
         setTimeout(() => {
             emailRef.current?.focus();
         }, 100);
+        
+        setSuccess(`Demo ${userType} credentials loaded! Click Sign In to continue.`);
+        setTimeout(() => setSuccess(''), 3000);
     };
 
     // Forgot password handler
@@ -151,8 +178,8 @@ function Login() {
             emailRef.current?.focus();
             return;
         }
-        // In a real app, this would trigger a password reset flow
-        setSuccess(`Password reset instructions sent to ${email}`);
+        setSuccess(`Password reset instructions would be sent to ${email} in a real app`);
+        setTimeout(() => setSuccess(''), 5000);
     };
 
     return (
@@ -222,6 +249,37 @@ function Login() {
                                 <div className="text-sm font-medium">{error}</div>
                             </div>
                         )}
+
+                        {/* Demo Users Quick Access */}
+                        <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4">
+                            <h3 className="text-sm font-semibold text-blue-900 mb-2 flex items-center gap-2">
+                                <Zap size={16} />
+                                Quick Demo Access
+                            </h3>
+                            <div className="grid grid-cols-3 gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => handleDemoLogin('user')}
+                                    className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 py-2 px-1 rounded-lg transition-colors"
+                                >
+                                    Regular User
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => handleDemoLogin('host')}
+                                    className="text-xs bg-green-100 hover:bg-green-200 text-green-700 py-2 px-1 rounded-lg transition-colors"
+                                >
+                                    Host
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => handleDemoLogin('admin')}
+                                    className="text-xs bg-purple-100 hover:bg-purple-200 text-purple-700 py-2 px-1 rounded-lg transition-colors"
+                                >
+                                    Admin
+                                </button>
+                            </div>
+                        </div>
 
                         {/* Email Field */}
                         <div className="space-y-3">
@@ -305,7 +363,7 @@ function Login() {
                             </div>
                         </div>
 
-                        {/* Remember Me & Demo Login */}
+                        {/* Remember Me */}
                         <div className="flex items-center justify-between">
                             <label className="flex items-center gap-3 cursor-pointer group">
                                 <div className="relative">
@@ -329,15 +387,6 @@ function Login() {
                                     Remember me
                                 </span>
                             </label>
-                            
-                            <button
-                                type="button"
-                                onClick={handleDemoLogin}
-                                className="text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors flex items-center gap-2"
-                            >
-                                <Zap size={14} />
-                                Demo Login
-                            </button>
                         </div>
 
                         {/* Submit Button */}

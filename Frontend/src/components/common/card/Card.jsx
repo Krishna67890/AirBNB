@@ -2,7 +2,7 @@ import React, { useContext, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useListingData } from "../../../Context/Listingcontext.jsx";
 // import { ListingDataContext } from '../../../Context/Listingcontext.jsx';
-import { useUserData } from "../../context/UserContext";
+import { useUser } from "../../../Context/UserContext.jsx"
 
 function Card({ 
   title, 

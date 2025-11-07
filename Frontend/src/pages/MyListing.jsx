@@ -1,187 +1,239 @@
-import React, { useContext, useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ListingDataContext } from '../Context/Listingcontext.jsx';
-import { UserDataContext } from '../Context/Usercontext.jsx';
-import Card from '../components/common/card/Card.jsx';
+import { useListingData } from '../Context/Listingcontext.jsx';
+import { useUser } from '../Context/UserContext.jsx';
 import Nav from '../components/common/Navigation/Nav.jsx';
-import {
-  Plus,
-  Filter,
-  Search,
-  Grid3X3,
-  List,
-  Edit3,
-  Eye,
+import { 
+  Plus, 
+  Edit, 
+  Eye, 
+  Trash2, 
+  Home, 
+  Search, 
+  Filter, 
+  SortAsc, 
+  MapPin, 
   DollarSign,
-  MapPin,
   Calendar,
-  TrendingUp,
-  Archive,
+  Star,
   MoreVertical,
-  X,
-  Sparkles,
-  Home,
-  Building,
-  Crown,
-  Zap,
+  Download,
+  Share2,
+  Archive,
+  RefreshCw,
+  AlertCircle,
+  CheckCircle,
+  XCircle,
   BarChart3,
-  Target
+  List,
+  ArrowRight
 } from 'lucide-react';
 
 function MyListing() {
-  const { listingData, loading: listingsLoading } = useContext(ListingDataContext);
-  const { userData, loading: userLoading } = useContext(UserDataContext);
   const navigate = useNavigate();
-
-  // State management
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
+  const { listingData, loading, deleteListing, updateListing } = useListingData();
+  const { userData } = useUser();
+  
   const [sortBy, setSortBy] = useState('newest');
-  const [viewMode, setViewMode] = useState('grid');
-  const [selectedListing, setSelectedListing] = useState(null);
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [editingListing, setEditingListing] = useState(null);
+  const [editForm, setEditForm] = useState({});
+  const [selectedListings, setSelectedListings] = useState(new Set());
+  const [bulkAction, setBulkAction] = useState('');
   const [showStats, setShowStats] = useState(true);
+  const [viewMode, setViewMode] = useState('grid');
 
-  // Filter listings where host matches current user _id
+  // Filter user's listings with proper error handling
   const myListings = useMemo(() => {
-    if (!userData || !listingData) return [];
-    return listingData.filter(listing => listing.host === userData._id);
-  }, [listingData, userData]);
+    if (!listingData || !Array.isArray(listingData) || !userData) return [];
+    
+    let filtered = listingData.filter(listing => 
+      listing && (listing.userId === userData.id || listing.host === userData.id)
+    );
 
-  // Enhanced filtering and sorting
-  const filteredAndSortedListings = useMemo(() => {
-    let filtered = myListings.filter(listing => {
-      const matchesSearch = 
-        listing.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        listing.city?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        listing.category?.toLowerCase().includes(searchQuery.toLowerCase());
+    // Search filter
+    if (searchTerm) {
+      filtered = filtered.filter(listing =>
+        listing?.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        listing?.city?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        listing?.landMark?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        listing?.category?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
 
-      const matchesStatus = statusFilter === 'all' || listing.status === statusFilter;
-
-      return matchesSearch && matchesStatus;
-    });
+    // Status filter
+    if (filterStatus !== 'all') {
+      filtered = filtered.filter(listing => listing?.status === filterStatus);
+    }
 
     // Sorting
+    const sorted = [...filtered];
     switch (sortBy) {
+      case 'rent-low-high':
+        return sorted.sort((a, b) => (a.rent || 0) - (b.rent || 0));
+      case 'rent-high-low':
+        return sorted.sort((a, b) => (b.rent || 0) - (a.rent || 0));
+      case 'title':
+        return sorted.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
       case 'newest':
-        filtered.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-        break;
+        return sorted.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
       case 'oldest':
-        filtered.sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
-        break;
-      case 'price-high':
-        filtered.sort((a, b) => (b.rent || 0) - (a.rent || 0));
-        break;
-      case 'price-low':
-        filtered.sort((a, b) => (a.rent || 0) - (b.rent || 0));
-        break;
+        return sorted.sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
       case 'popular':
-        // Simulate popularity based on views
-        filtered.sort((a, b) => (b.views || 0) - (a.views || 0));
-        break;
+        return sorted.sort((a, b) => (b.views || 0) - (a.views || 0));
       default:
-        break;
+        return sorted;
     }
+  }, [listingData, userData, sortBy, filterStatus, searchTerm]);
 
-    return filtered;
-  }, [myListings, searchQuery, statusFilter, sortBy]);
+  // Statistics
+  const stats = useMemo(() => ({
+    total: myListings.length,
+    active: myListings.filter(listing => listing?.status === 'active').length,
+    inactive: myListings.filter(listing => listing?.status === 'inactive').length,
+    pending: myListings.filter(listing => listing?.status === 'pending').length,
+    totalRent: myListings.reduce((sum, listing) => sum + (listing?.rent || 0), 0),
+    avgRent: myListings.length > 0 ? Math.round(myListings.reduce((sum, listing) => sum + (listing?.rent || 0), 0) / myListings.length) : 0,
+    totalViews: myListings.reduce((sum, listing) => sum + (listing?.views || 0), 0),
+    avgRating: myListings.length > 0 ? (myListings.reduce((sum, listing) => sum + (listing?.rating || 4.5), 0) / myListings.length).toFixed(1) : '0.0'
+  }), [myListings]);
 
-  // Calculate statistics
-  const stats = useMemo(() => {
-    const totalListings = myListings.length;
-    const activeListings = myListings.filter(listing => !listing.archived).length;
-    const totalEarnings = myListings.reduce((sum, listing) => sum + (listing.earnings || 0), 0);
-    const averageRating = myListings.length > 0 
-      ? (myListings.reduce((sum, listing) => sum + (listing.rating || 0), 0) / myListings.length).toFixed(1)
-      : 0;
+  // Handle listing selection
+  const toggleListingSelection = (listingId) => {
+    setSelectedListings(prev => {
+      const newSelection = new Set(prev);
+      if (newSelection.has(listingId)) {
+        newSelection.delete(listingId);
+      } else {
+        newSelection.add(listingId);
+      }
+      return newSelection;
+    });
+  };
 
-    return {
-      totalListings,
-      activeListings,
-      totalEarnings,
-      averageRating,
-      archivedListings: totalListings - activeListings
+  const selectAllListings = () => {
+    if (selectedListings.size === myListings.length) {
+      setSelectedListings(new Set());
+    } else {
+      setSelectedListings(new Set(myListings.map(listing => listing._id)));
+    }
+  };
+
+  // Bulk actions
+  const handleBulkAction = async () => {
+    if (!bulkAction || selectedListings.size === 0) return;
+
+    const actions = {
+      activate: { status: 'active' },
+      deactivate: { status: 'inactive' },
+      archive: { status: 'archived' },
+      delete: null
     };
-  }, [myListings]);
 
-  // Quick actions
-  const quickActions = [
-    {
-      icon: <Plus size={20} />,
-      label: 'Create New',
-      description: 'Add a new property',
-      action: () => navigate('/listingpage1'),
-      color: 'from-green-500 to-emerald-600'
-    },
-    {
-      icon: <BarChart3 size={20} />,
-      label: 'View Analytics',
-      description: 'Performance insights',
-      action: () => setShowStats(!showStats),
-      color: 'from-blue-500 to-cyan-600'
-    },
-    {
-      icon: <Target size={20} />,
-      label: 'Optimize',
-      description: 'Improve listings',
-      action: () => {},
-      color: 'from-purple-500 to-pink-600'
+    if (bulkAction === 'delete') {
+      if (!window.confirm(`Are you sure you want to delete ${selectedListings.size} listings?`)) return;
+      
+      for (const listingId of selectedListings) {
+        await deleteListing(listingId);
+      }
+    } else {
+      for (const listingId of selectedListings) {
+        await updateListing(listingId, actions[bulkAction]);
+      }
     }
-  ];
 
-  // Loading state
-  if (userLoading || listingsLoading) {
+    setSelectedListings(new Set());
+    setBulkAction('');
+  };
+
+  // Individual actions
+  const handleDelete = async (listingId) => {
+    if (window.confirm('Are you sure you want to delete this listing?')) {
+      await deleteListing(listingId);
+    }
+  };
+
+  const handleEdit = (listing) => {
+    setEditingListing(listing._id);
+    setEditForm({
+      title: listing.title || '',
+      rent: listing.rent || '',
+      city: listing.city || '',
+      landMark: listing.landMark || '',
+      category: listing.category || '',
+      description: listing.description || ''
+    });
+  };
+
+  const handleUpdate = async (listingId) => {
+    if (!editForm.title || !editForm.rent || !editForm.city) {
+      alert('Please fill in all required fields');
+      return;
+    }
+
+    await updateListing(listingId, editForm);
+    setEditingListing(null);
+    setEditForm({});
+  };
+
+  const handleCancelEdit = () => {
+    setEditingListing(null);
+    setEditForm({});
+  };
+
+  const handleViewListing = (listingId) => {
+    navigate(`/listing/${listingId}`);
+  };
+
+  const handleCreateNewListing = () => {
+    navigate('/listingpage1');
+  };
+
+  const handleDuplicateListing = async (listing) => {
+    const duplicatedListing = {
+      ...listing,
+      title: `${listing.title} (Copy)`,
+      createdAt: new Date().toISOString(),
+      status: 'draft'
+    };
+    // You'll need to add a createListing function to your context
+    // await createListing(duplicatedListing);
+  };
+
+  // Status badge component
+  const StatusBadge = ({ status }) => {
+    const statusConfig = {
+      active: { color: 'bg-green-100 text-green-800', icon: <CheckCircle size={14} /> },
+      inactive: { color: 'bg-yellow-100 text-yellow-800', icon: <XCircle size={14} /> },
+      pending: { color: 'bg-blue-100 text-blue-800', icon: <AlertCircle size={14} /> },
+      draft: { color: 'bg-gray-100 text-gray-800', icon: <Edit size={14} /> },
+      archived: { color: 'bg-red-100 text-red-800', icon: <Archive size={14} /> }
+    };
+
+    const config = statusConfig[status] || statusConfig.draft;
+
     return (
-      <div className="min-h-screen bg-gray-50">
-        <Nav />
-        <div className="pt-32 px-4">
-          <div className="max-w-7xl mx-auto">
-            {/* Skeleton Header */}
-            <div className="animate-pulse">
-              <div className="h-8 bg-gray-200 rounded w-64 mb-6"></div>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-                {[1, 2, 3, 4].map(i => (
-                  <div key={i} className="h-24 bg-gray-200 rounded-2xl"></div>
-                ))}
-              </div>
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {[1, 2, 3, 4, 5, 6].map(i => (
-                  <div key={i} className="h-80 bg-gray-200 rounded-2xl"></div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${config.color}`}>
+        {config.icon}
+        {status?.charAt(0)?.toUpperCase() + status?.slice(1)}
+      </span>
     );
-  }
+  };
 
-  if (!userData) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-gray-50">
         <Nav />
-        <div className="flex flex-col items-center justify-center min-h-screen px-4">
-          <div className="text-center max-w-md">
-            <div className="w-24 h-24 bg-rose-100 rounded-full flex items-center justify-center mx-auto mb-6">
-              <Home size={40} className="text-rose-500" />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 mt-16">
+          <div className="animate-pulse">
+            <div className="h-8 bg-gray-200 rounded w-1/4 mb-4"></div>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+              {[1, 2, 3, 4].map(i => (
+                <div key={i} className="bg-gray-200 rounded-lg h-20"></div>
+              ))}
             </div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-4">Access Required</h1>
-            <p className="text-gray-600 mb-8 text-lg">
-              Please sign in to view and manage your property listings.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <button
-                onClick={() => navigate('/login')}
-                className="bg-rose-500 text-white px-8 py-3 rounded-2xl hover:bg-rose-600 transition-colors font-semibold"
-              >
-                Sign In
-              </button>
-              <button
-                onClick={() => navigate('/signup')}
-                className="border-2 border-gray-300 text-gray-700 px-8 py-3 rounded-2xl hover:border-rose-500 hover:text-rose-500 transition-colors font-semibold"
-              >
-                Create Account
-              </button>
-            </div>
+            <div className="bg-gray-200 rounded-lg h-96"></div>
           </div>
         </div>
       </div>
@@ -189,316 +241,421 @@ function MyListing() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50/30">
+    <div className="min-h-screen bg-gray-50">
       <Nav />
       
-      <div className="pt-28 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
-          {/* Header Section */}
-          <div className="mb-8">
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 mb-8">
-              <div>
-                <h1 className="text-4xl font-bold text-gray-900 mb-2">
-                  My Properties
-                </h1>
-                <p className="text-gray-600 text-lg">
-                  Manage your listings and track performance
-                </p>
-              </div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 mt-16">
+        {/* Header Section */}
+        <div className="bg-white rounded-2xl shadow-sm p-6 mb-8 border border-gray-200">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">My Listings</h1>
+              <p className="text-gray-600 mt-2">Manage and track your property listings</p>
+            </div>
+            
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowStats(!showStats)}
+                className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                <BarChart3 size={18} />
+                {showStats ? 'Hide Stats' : 'Show Stats'}
+              </button>
               
               <button
-                onClick={() => navigate('/listingpage1')}
-                className="bg-gradient-to-r from-green-500 to-emerald-600 text-white px-8 py-4 rounded-2xl hover:shadow-xl transition-all duration-300 font-semibold flex items-center gap-3 group hover:scale-105"
+                onClick={handleCreateNewListing}
+                className="flex items-center gap-2 bg-rose-600 text-white px-6 py-2 rounded-lg hover:bg-rose-700 transition-colors font-semibold"
               >
-                <Plus size={20} className="group-hover:rotate-90 transition-transform duration-300" />
-                Create New Listing
+                <Plus size={18} />
+                Add Listing
               </button>
-            </div>
 
-            {/* Quick Actions */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-              {quickActions.map((action, index) => (
-                <button
-                  key={index}
-                  onClick={action.action}
-                  className={`bg-gradient-to-r ${action.color} text-white p-6 rounded-2xl hover:shadow-xl transition-all duration-300 text-left group hover:scale-105`}
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 bg-white/20 rounded-xl group-hover:scale-110 transition-transform duration-300">
-                      {action.icon}
-                    </div>
-                    <div>
-                      <div className="font-semibold text-lg mb-1">{action.label}</div>
-                      <div className="text-white/80 text-sm">{action.description}</div>
-                    </div>
-                  </div>
-                </button>
-              ))}
+              {/* Next Button to ListingPage1 */}
+              <button
+                onClick={() => navigate('/listingpage1')}
+                className="flex items-center gap-2 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors font-semibold"
+              >
+                Create New Listing
+                <ArrowRight size={18} />
+              </button>
             </div>
           </div>
 
           {/* Statistics Cards */}
-          {showStats && myListings.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-              <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-200">
+          {showStats && (
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-gradient-to-br from-rose-50 to-rose-100 rounded-xl p-4 border border-rose-200">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-gray-600 text-sm font-medium">Total Listings</p>
-                    <p className="text-3xl font-bold text-gray-900 mt-1">{stats.totalListings}</p>
+                    <div className="text-2xl font-bold text-rose-600">{stats.total}</div>
+                    <div className="text-sm text-rose-700">Total Listings</div>
                   </div>
-                  <div className="p-3 bg-blue-100 rounded-xl">
-                    <Home size={24} className="text-blue-600" />
-                  </div>
-                </div>
-                <div className="flex items-center gap-1 mt-3 text-green-500 text-sm">
-                  <TrendingUp size={16} />
-                  <span>{stats.activeListings} active</span>
+                  <Home className="text-rose-500" size={24} />
                 </div>
               </div>
-
-              <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-200">
+              
+              <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 border border-green-200">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-gray-600 text-sm font-medium">Total Earnings</p>
-                    <p className="text-3xl font-bold text-gray-900 mt-1">₹{stats.totalEarnings.toLocaleString()}</p>
+                    <div className="text-2xl font-bold text-green-600">{stats.active}</div>
+                    <div className="text-sm text-green-700">Active</div>
                   </div>
-                  <div className="p-3 bg-green-100 rounded-xl">
-                    <DollarSign size={24} className="text-green-600" />
-                  </div>
+                  <CheckCircle className="text-green-500" size={24} />
                 </div>
-                <div className="text-gray-500 text-sm mt-3">Lifetime revenue</div>
               </div>
-
-              <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-200">
+              
+              <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-gray-600 text-sm font-medium">Average Rating</p>
-                    <p className="text-3xl font-bold text-gray-900 mt-1">{stats.averageRating}</p>
+                    <div className="text-2xl font-bold text-blue-600">₹{stats.totalRent}</div>
+                    <div className="text-sm text-blue-700">Monthly Value</div>
                   </div>
-                  <div className="p-3 bg-yellow-100 rounded-xl">
-                    <Sparkles size={24} className="text-yellow-600" />
-                  </div>
-                </div>
-                <div className="flex items-center gap-1 mt-3 text-sm text-gray-500">
-                  <span>Across all listings</span>
+                  <DollarSign className="text-blue-500" size={24} />
                 </div>
               </div>
-
-              <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-200">
+              
+              <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-4 border border-purple-200">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-gray-600 text-sm font-medium">Performance</p>
-                    <p className="text-3xl font-bold text-gray-900 mt-1">
-                      {myListings.length > 0 ? 'Good' : 'N/A'}
-                    </p>
+                    <div className="text-2xl font-bold text-purple-600">{stats.avgRating}</div>
+                    <div className="text-sm text-purple-700">Avg Rating</div>
                   </div>
-                  <div className="p-3 bg-purple-100 rounded-xl">
-                    <Zap size={24} className="text-purple-600" />
-                  </div>
-                </div>
-                <div className="text-gray-500 text-sm mt-3">
-                  {stats.archivedListings > 0 ? `${stats.archivedListings} archived` : 'All active'}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Filters and Search */}
-          {myListings.length > 0 && (
-            <div className="bg-white rounded-2xl shadow-lg p-6 mb-8">
-              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                {/* Search */}
-                <div className="flex-1 max-w-md">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-                    <input
-                      type="text"
-                      placeholder="Search your listings..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                </div>
-
-                {/* Filters */}
-                <div className="flex flex-wrap items-center gap-4">
-                  {/* Status Filter */}
-                  <select
-                    value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
-                    className="px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="all">All Status</option>
-                    <option value="active">Active</option>
-                    <option value="draft">Draft</option>
-                    <option value="archived">Archived</option>
-                  </select>
-
-                  {/* Sort By */}
-                  <select
-                    value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value)}
-                    className="px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="newest">Newest First</option>
-                    <option value="oldest">Oldest First</option>
-                    <option value="price-high">Price: High to Low</option>
-                    <option value="price-low">Price: Low to High</option>
-                    <option value="popular">Most Popular</option>
-                  </select>
-
-                  {/* View Toggle */}
-                  <div className="flex bg-gray-100 rounded-xl p-1">
-                    <button
-                      onClick={() => setViewMode('grid')}
-                      className={`p-2 rounded-lg transition-all duration-200 ${
-                        viewMode === 'grid' ? 'bg-white text-blue-500 shadow-sm' : 'text-gray-600'
-                      }`}
-                    >
-                      <Grid3X3 size={20} />
-                    </button>
-                    <button
-                      onClick={() => setViewMode('list')}
-                      className={`p-2 rounded-lg transition-all duration-200 ${
-                        viewMode === 'list' ? 'bg-white text-blue-500 shadow-sm' : 'text-gray-600'
-                      }`}
-                    >
-                      <List size={20} />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Listings Grid */}
-          {filteredAndSortedListings.length > 0 ? (
-            <div className={
-              viewMode === 'grid' 
-                ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
-                : "space-y-4"
-            }>
-              {filteredAndSortedListings.map((listing) => (
-                <div 
-                  key={listing._id}
-                  className={
-                    viewMode === 'list' 
-                      ? "bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-200"
-                      : "bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 border border-gray-200"
-                  }
-                >
-                  <Card
-                    title={listing.title}
-                    landMark={listing.landMark}
-                    city={listing.city}
-                    image1={listing.image1}
-                    image2={listing.image2}
-                    image3={listing.image3}
-                    rent={listing.rent}
-                    category={listing.category}
-                    id={listing._id}
-                    viewMode={viewMode}
-                    showActions={true}
-                    onEdit={() => {
-                      // Implement edit functionality
-                      console.log('Edit listing:', listing._id);
-                    }}
-                    onView={() => navigate(`/listing/${listing._id}`)}
-                    status={listing.status}
-                    createdAt={listing.createdAt}
-                    views={listing.views || 0}
-                    earnings={listing.earnings || 0}
-                  />
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-16">
-              <div className="bg-white rounded-3xl shadow-lg p-12 max-w-2xl mx-auto border border-gray-200">
-                <div className="w-24 h-24 bg-gradient-to-br from-blue-100 to-purple-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                  <Home size={48} className="text-blue-500" />
-                </div>
-                <h3 className="text-3xl font-bold text-gray-900 mb-4">
-                  {myListings.length === 0 ? 'No Listings Yet' : 'No Matching Listings'}
-                </h3>
-                <p className="text-gray-600 text-lg mb-8 leading-relaxed">
-                  {myListings.length === 0 
-                    ? "You haven't created any property listings yet. Start by creating your first listing to attract guests and generate income."
-                    : "No listings match your current search criteria. Try adjusting your filters or search terms."
-                  }
-                </p>
-                <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                  <button
-                    onClick={() => navigate('/listingpage1')}
-                    className="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-8 py-4 rounded-2xl hover:shadow-xl transition-all duration-300 font-semibold hover:scale-105"
-                  >
-                    Create Your First Listing
-                  </button>
-                  {myListings.length > 0 && (
-                    <button
-                      onClick={() => {
-                        setSearchQuery('');
-                        setStatusFilter('all');
-                        setSortBy('newest');
-                      }}
-                      className="border-2 border-gray-300 text-gray-700 px-8 py-4 rounded-2xl hover:border-blue-500 hover:text-blue-500 transition-all duration-300 font-semibold"
-                    >
-                      Clear Filters
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Performance Tips */}
-          {myListings.length > 0 && (
-            <div className="mt-12 bg-gradient-to-r from-blue-50 to-purple-50 rounded-2xl p-8 border border-blue-200">
-              <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-3">
-                <Target size={24} className="text-blue-500" />
-                Boost Your Listings
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <div className="bg-white rounded-xl p-4 border border-blue-100">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="p-2 bg-blue-100 rounded-lg">
-                      <Eye size={20} className="text-blue-600" />
-                    </div>
-                    <h4 className="font-semibold text-gray-900">High-Quality Photos</h4>
-                  </div>
-                  <p className="text-gray-600 text-sm">
-                    Listings with professional photos get 40% more views and bookings.
-                  </p>
-                </div>
-                
-                <div className="bg-white rounded-xl p-4 border border-blue-100">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="p-2 bg-green-100 rounded-lg">
-                      <DollarSign size={20} className="text-green-600" />
-                    </div>
-                    <h4 className="font-semibold text-gray-900">Competitive Pricing</h4>
-                  </div>
-                  <p className="text-gray-600 text-sm">
-                    Research local market rates to optimize your pricing strategy.
-                  </p>
-                </div>
-                
-                <div className="bg-white rounded-xl p-4 border border-blue-100">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="p-2 bg-purple-100 rounded-lg">
-                      <Sparkles size={20} className="text-purple-600" />
-                    </div>
-                    <h4 className="font-semibold text-gray-900">Detailed Descriptions</h4>
-                  </div>
-                  <p className="text-gray-600 text-sm">
-                    Comprehensive descriptions help guests understand your property's unique features.
-                  </p>
+                  <Star className="text-purple-500" size={24} />
                 </div>
               </div>
             </div>
           )}
         </div>
+
+        {/* Bulk Actions Bar */}
+        {selectedListings.size > 0 && (
+          <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 mb-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <span className="text-rose-700 font-medium">
+                  {selectedListings.size} listing{selectedListings.size > 1 ? 's' : ''} selected
+                </span>
+              </div>
+              
+              <div className="flex flex-wrap gap-2">
+                <select
+                  value={bulkAction}
+                  onChange={(e) => setBulkAction(e.target.value)}
+                  className="px-3 py-2 border border-rose-300 rounded-lg bg-white text-sm focus:ring-2 focus:ring-rose-500"
+                >
+                  <option value="">Bulk Actions</option>
+                  <option value="activate">Activate</option>
+                  <option value="deactivate">Deactivate</option>
+                  <option value="archive">Archive</option>
+                  <option value="delete">Delete</option>
+                </select>
+                
+                <button
+                  onClick={handleBulkAction}
+                  disabled={!bulkAction}
+                  className="px-4 py-2 bg-rose-600 text-white rounded-lg hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                >
+                  Apply
+                </button>
+                
+                <button
+                  onClick={() => setSelectedListings(new Set())}
+                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Controls Section */}
+        <div className="bg-white rounded-2xl shadow-sm p-6 mb-8 border border-gray-200">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            <div className="flex-1">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+                <input
+                  type="text"
+                  placeholder="Search by title, location, category..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3">
+              {/* View Mode Toggle */}
+              <div className="flex border border-gray-300 rounded-lg overflow-hidden">
+                <button
+                  onClick={() => setViewMode('grid')}
+                  className={`p-2 ${viewMode === 'grid' ? 'bg-rose-500 text-white' : 'bg-white text-gray-600'}`}
+                >
+                  <div className="w-4 h-4 grid grid-cols-2 gap-0.5">
+                    <div className="bg-current rounded-sm"></div>
+                    <div className="bg-current rounded-sm"></div>
+                    <div className="bg-current rounded-sm"></div>
+                    <div className="bg-current rounded-sm"></div>
+                  </div>
+                </button>
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={`p-2 ${viewMode === 'list' ? 'bg-rose-500 text-white' : 'bg-white text-gray-600'}`}
+                >
+                  <List size={16} />
+                </button>
+              </div>
+
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:border-transparent"
+              >
+                <option value="all">All Status</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+                <option value="pending">Pending</option>
+                <option value="draft">Draft</option>
+              </select>
+
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:border-transparent"
+              >
+                <option value="newest">Newest First</option>
+                <option value="oldest">Oldest First</option>
+                <option value="rent-low-high">Rent: Low to High</option>
+                <option value="rent-high-low">Rent: High to Low</option>
+                <option value="title">Title A-Z</option>
+                <option value="popular">Most Popular</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* Listings Grid/List */}
+        {myListings.length === 0 ? (
+          <div className="bg-white rounded-2xl shadow-sm p-12 text-center border border-gray-200">
+            <div className="w-20 h-20 bg-rose-100 rounded-full flex items-center justify-center mx-auto mb-6">
+              <Home className="text-rose-500" size={32} />
+            </div>
+            <h3 className="text-2xl font-bold text-gray-900 mb-2">No listings yet</h3>
+            <p className="text-gray-600 mb-6 max-w-md mx-auto">
+              Start by creating your first property listing to share it with travelers and earn income.
+            </p>
+            <div className="flex gap-3 justify-center flex-wrap">
+              <button 
+                onClick={handleCreateNewListing}
+                className="bg-rose-600 text-white px-8 py-3 rounded-xl hover:bg-rose-700 transition-colors font-semibold flex items-center gap-2"
+              >
+                <Plus size={20} />
+                Create Your First Listing
+              </button>
+              
+              {/* Next Button in Empty State */}
+              <button 
+                onClick={() => navigate('/listingpage1')}
+                className="bg-blue-600 text-white px-8 py-3 rounded-xl hover:bg-blue-700 transition-colors font-semibold flex items-center gap-2"
+              >
+                Get Started
+                <ArrowRight size={20} />
+              </button>
+              
+              <button 
+                onClick={() => navigate('/')}
+                className="border border-gray-300 text-gray-700 px-6 py-3 rounded-xl hover:bg-gray-50 transition-colors font-semibold"
+              >
+                Browse Listings
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className={viewMode === 'grid' 
+              ? "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"
+              : "space-y-4"
+            }>
+              {myListings.map((listing) => (
+                <div
+                  key={listing._id}
+                  className={`bg-white rounded-2xl shadow-sm border border-gray-200 hover:shadow-md transition-all duration-300 ${
+                    viewMode === 'list' ? 'flex' : ''
+                  } ${selectedListings.has(listing._id) ? 'ring-2 ring-rose-500' : ''}`}
+                >
+                  {/* Selection Checkbox */}
+                  <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedListings.has(listing._id)}
+                        onChange={() => toggleListingSelection(listing._id)}
+                        className="rounded border-gray-300 text-rose-600 focus:ring-rose-500"
+                      />
+                      <StatusBadge status={listing.status} />
+                    </label>
+                    
+                    <div className="flex items-center gap-1">
+                      <Star size={14} className="text-yellow-400 fill-current" />
+                      <span className="text-sm font-medium">{listing.rating || '4.5'}</span>
+                      <span className="text-gray-500 text-sm">({listing.reviews || '12'})</span>
+                    </div>
+                  </div>
+
+                  {/* Content */}
+                  <div className={`p-4 ${viewMode === 'list' ? 'flex-1 flex' : ''}`}>
+                    {viewMode === 'list' && (
+                      <div className="w-32 h-24 flex-shrink-0 mr-4">
+                        <img
+                          src={listing.image1}
+                          alt={listing.title}
+                          className="w-full h-full object-cover rounded-lg"
+                        />
+                      </div>
+                    )}
+                    
+                    <div className="flex-1">
+                      <div className="flex items-start justify-between mb-3">
+                        <div>
+                          <h3 className="font-semibold text-gray-900 line-clamp-1">
+                            {listing.title}
+                          </h3>
+                          <div className="flex items-center gap-2 mt-1">
+                            <MapPin size={14} className="text-gray-400" />
+                            <span className="text-sm text-gray-600">
+                              {listing.landMark}, {listing.city}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        <div className="text-right">
+                          <div className="text-xl font-bold text-rose-600">₹{listing.rent}</div>
+                          <div className="text-sm text-gray-500">per night</div>
+                        </div>
+                      </div>
+
+                      <p className="text-gray-600 text-sm mb-4 line-clamp-2">
+                        {listing.description}
+                      </p>
+
+                      <div className="flex items-center justify-between text-sm text-gray-500 mb-4">
+                        <div className="flex items-center gap-4">
+                          <div className="flex items-center gap-1">
+                            <Eye size={14} />
+                            <span>{listing.views || 0} views</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Calendar size={14} />
+                            <span>{new Date(listing.createdAt).toLocaleDateString()}</span>
+                          </div>
+                        </div>
+                        
+                        <div className="bg-gray-100 text-gray-700 px-2 py-1 rounded-full text-xs">
+                          {listing.category}
+                        </div>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleViewListing(listing._id)}
+                          className="flex-1 bg-rose-500 text-white py-2 rounded-lg hover:bg-rose-600 transition-colors flex items-center justify-center gap-2 text-sm"
+                        >
+                          <Eye size={16} />
+                          View
+                        </button>
+                        
+                        <button
+                          onClick={() => handleEdit(listing)}
+                          className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2 text-sm"
+                        >
+                          <Edit size={16} />
+                        </button>
+                        
+                        <div className="relative">
+                          <button className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+                            <MoreVertical size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Edit Form */}
+                  {editingListing === listing._id && (
+                    <div className="p-4 border-t border-gray-200 bg-gray-50">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                          <input
+                            type="text"
+                            value={editForm.title}
+                            onChange={(e) => setEditForm(prev => ({ ...prev, title: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Rent (₹)</label>
+                          <input
+                            type="number"
+                            value={editForm.rent}
+                            onChange={(e) => setEditForm(prev => ({ ...prev, rent: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
+                          <input
+                            type="text"
+                            value={editForm.city}
+                            onChange={(e) => setEditForm(prev => ({ ...prev, city: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Landmark</label>
+                          <input
+                            type="text"
+                            value={editForm.landMark}
+                            onChange={(e) => setEditForm(prev => ({ ...prev, landMark: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleUpdate(listing._id)}
+                          className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors text-sm"
+                        >
+                          Save Changes
+                        </button>
+                        <button
+                          onClick={handleCancelEdit}
+                          className="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors text-sm"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Next Button at Bottom when listings exist */}
+            <div className="mt-8 flex justify-center">
+              <button
+                onClick={() => navigate('/listingpage1')}
+                className="flex items-center gap-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-4 rounded-xl hover:shadow-lg transition-all duration-300 font-semibold text-lg"
+              >
+                <Plus size={24} />
+                Create Another Listing
+                <ArrowRight size={24} />
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
