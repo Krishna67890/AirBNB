@@ -9,7 +9,7 @@ import Home from './pages/Home';
 import Login from './pages/Login';
 import SignUp from './pages/SignUp';
 import ListingPage1 from './pages/ListingPage1';
-import ListingPage2 from './pages/ListingPage2';
+import ListingPage2 from './pages/Listingpage2';
 import ListingPage3 from './pages/Listingpage3';
 import ListingDetails from './pages/ListingDetails';
 import MyListing from './pages/MyListing';
